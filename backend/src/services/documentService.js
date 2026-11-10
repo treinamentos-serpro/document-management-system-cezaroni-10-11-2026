@@ -18,6 +18,24 @@ function normalizeOwner(owner) {
   return normalizedOwner;
 }
 
+function createDocumentNotFoundError() {
+  return new DocumentServiceError(404, 'DOCUMENT_NOT_FOUND', 'Documento não encontrado.');
+}
+
+async function findAvailableDocument(id, owner, documentRepository, fileRepository) {
+  const document = await documentRepository.findById(id);
+  if (!document) {
+    throw createDocumentNotFoundError();
+  }
+
+  const normalizedOwner = normalizeOwner(owner);
+  if (document.owner !== normalizedOwner || !(await fileRepository.exists(document.id))) {
+    throw createDocumentNotFoundError();
+  }
+
+  return document;
+}
+
 function createDocumentService({ documentRepository, fileRepository }) {
   return {
     async upload({ file, owner }) {
@@ -50,15 +68,12 @@ function createDocumentService({ documentRepository, fileRepository }) {
     },
 
     async getDownload(id, owner) {
-      const document = await documentRepository.findById(id);
-      if (!document || document.owner !== normalizeOwner(owner)) {
-        throw new DocumentServiceError(404, 'DOCUMENT_NOT_FOUND', 'Documento não encontrado.');
-      }
-
-      if (!(await fileRepository.exists(document.id))) {
-        throw new DocumentServiceError(404, 'DOCUMENT_NOT_FOUND', 'Documento não encontrado.');
-      }
-
+      const document = await findAvailableDocument(
+        id,
+        owner,
+        documentRepository,
+        fileRepository
+      );
       return { document, filePath: fileRepository.getPath(document.id) };
     },
   };
